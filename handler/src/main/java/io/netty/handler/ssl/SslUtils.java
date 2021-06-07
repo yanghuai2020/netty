@@ -23,6 +23,7 @@ import io.netty.handler.codec.base64.Base64;
 import io.netty.handler.codec.base64.Base64Dialect;
 import io.netty.util.NetUtil;
 import io.netty.util.internal.EmptyArrays;
+import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -30,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.Provider;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -193,6 +195,22 @@ final class SslUtils {
         }
         context.init(null, new TrustManager[0], null);
         return context;
+    }
+
+    static SSLContext getSSLContext(String provider)
+            throws NoSuchAlgorithmException, KeyManagementException, NoSuchProviderException {
+        final SSLContext context;
+        if (StringUtil.isNullOrEmpty(provider)) {
+            context = SSLContext.getInstance(getTlsVersion());
+        } else {
+            context = SSLContext.getInstance(getTlsVersion(), provider);
+        }
+        context.init(null, new TrustManager[0], null);
+        return context;
+    }
+
+    private static String getTlsVersion() {
+        return TLSV1_3_JDK_SUPPORTED ? PROTOCOL_TLS_V1_3 : PROTOCOL_TLS_V1_2;
     }
 
     static boolean arrayContains(String[] array, String value) {
@@ -471,6 +489,10 @@ final class SslUtils {
     static boolean isTLSv13Cipher(String cipher) {
         // See https://tools.ietf.org/html/rfc8446#appendix-B.4
         return TLSV13_CIPHERS.contains(cipher);
+    }
+
+    static boolean isEmpty(Object[] arr) {
+        return arr == null || arr.length == 0;
     }
 
     private SslUtils() {

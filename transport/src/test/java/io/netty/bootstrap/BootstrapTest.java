@@ -35,6 +35,7 @@ import io.netty.channel.ServerChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.resolver.AddressResolver;
 import io.netty.resolver.AddressResolverGroup;
 import io.netty.resolver.AbstractAddressResolver;
@@ -42,8 +43,10 @@ import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.Promise;
-import org.junit.AfterClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.function.Executable;
 
 import java.net.ConnectException;
 import java.net.SocketAddress;
@@ -57,10 +60,19 @@ import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class BootstrapTest {
 
@@ -68,7 +80,7 @@ public class BootstrapTest {
     private static final EventLoopGroup groupB = new DefaultEventLoopGroup(1);
     private static final ChannelInboundHandler dummyHandler = new DummyHandler();
 
-    @AfterClass
+    @AfterAll
     public static void destroy() {
         groupA.shutdownGracefully();
         groupB.shutdownGracefully();
@@ -98,7 +110,27 @@ public class BootstrapTest {
         assertEquals(value, attributesArray[0].getValue());
     }
 
-    @Test(timeout = 10000)
+    @Test
+    public void optionsAndAttributesMustBeAvailableOnChannelInit() throws InterruptedException {
+        final AttributeKey<String> key = AttributeKey.valueOf(UUID.randomUUID().toString());
+        new Bootstrap()
+                .group(groupA)
+                .channel(LocalChannel.class)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 4242)
+                .attr(key, "value")
+                .handler(new ChannelInitializer<LocalChannel>() {
+                    @Override
+                    protected void initChannel(LocalChannel ch) throws Exception {
+                        Integer option = ch.config().getOption(ChannelOption.CONNECT_TIMEOUT_MILLIS);
+                        assertEquals(4242, (int) option);
+                        assertEquals("value", ch.attr(key).get());
+                    }
+                })
+                .bind(LocalAddress.ANY).sync();
+    }
+
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
     public void testBindDeadLock() throws Exception {
         final Bootstrap bootstrapA = new Bootstrap();
         bootstrapA.group(groupA);
@@ -134,7 +166,8 @@ public class BootstrapTest {
         }
     }
 
-    @Test(timeout = 10000)
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
     public void testConnectDeadLock() throws Exception {
         final Bootstrap bootstrapA = new Bootstrap();
         bootstrapA.group(groupA);
@@ -247,7 +280,8 @@ public class BootstrapTest {
         }
     }
 
-    @Test(expected = ConnectException.class, timeout = 10000)
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
     public void testLateRegistrationConnect() throws Exception {
         EventLoopGroup group = new DelayedEventLoopGroup();
         try {
@@ -255,7 +289,12 @@ public class BootstrapTest {
             bootstrapA.group(group);
             bootstrapA.channel(LocalChannel.class);
             bootstrapA.handler(dummyHandler);
-            bootstrapA.connect(LocalAddress.ANY).syncUninterruptibly();
+            assertThrows(ConnectException.class, new Executable() {
+                @Override
+                public void execute() {
+                    bootstrapA.connect(LocalAddress.ANY).syncUninterruptibly();
+                }
+            });
         } finally {
             group.shutdownGracefully();
         }

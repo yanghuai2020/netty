@@ -21,7 +21,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.PrematureChannelClosureException;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.util.CharsetUtil;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -33,11 +33,11 @@ import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class HttpResponseDecoderTest {
 
@@ -725,6 +725,26 @@ public class HttpResponseDecoderTest {
         assertFalse(response.decoderResult().isFailure());
         assertEquals(HttpHeaderValues.CHUNKED.toString(), response.headers().get(HttpHeaderNames.TRANSFER_ENCODING));
         assertEquals("netty.io", response.headers().get(HttpHeaderNames.HOST));
+        assertFalse(channel.finish());
+    }
+
+    @Test
+    public void testHttpMessageDecoderResult() {
+        String responseStr = "HTTP/1.1 200 OK\r\n" +
+                "Content-Length: 11\r\n" +
+                "Connection: close\r\n\r\n" +
+                "Lorem ipsum";
+        EmbeddedChannel channel = new EmbeddedChannel(new HttpResponseDecoder());
+        assertTrue(channel.writeInbound(Unpooled.copiedBuffer(responseStr, CharsetUtil.US_ASCII)));
+        HttpResponse response = channel.readInbound();
+        assertTrue(response.decoderResult().isSuccess());
+        assertThat(response.decoderResult(), instanceOf(HttpMessageDecoderResult.class));
+        HttpMessageDecoderResult decoderResult = (HttpMessageDecoderResult) response.decoderResult();
+        assertThat(decoderResult.initialLineLength(), is(15));
+        assertThat(decoderResult.headerSize(), is(35));
+        assertThat(decoderResult.totalSize(), is(50));
+        HttpContent c = channel.readInbound();
+        c.release();
         assertFalse(channel.finish());
     }
 }

@@ -48,7 +48,7 @@ public class ReferenceCountedOpenSslEngineTest extends OpenSslEngineTest {
 
     @Override
     protected void cleanupClientSslEngine(SSLEngine engine) {
-        ReferenceCountUtil.release(engine);
+        ReferenceCountUtil.release(unwrapEngine(engine));
     }
 
     @Override
@@ -58,7 +58,7 @@ public class ReferenceCountedOpenSslEngineTest extends OpenSslEngineTest {
 
     @Override
     protected void cleanupServerSslEngine(SSLEngine engine) {
-        ReferenceCountUtil.release(engine);
+        ReferenceCountUtil.release(unwrapEngine(engine));
     }
 
     @Test(expected = NullPointerException.class)
@@ -78,6 +78,8 @@ public class ReferenceCountedOpenSslEngineTest extends OpenSslEngineTest {
     protected SslContext wrapContext(SslContext context) {
         if (context instanceof ReferenceCountedOpenSslContext) {
             ((ReferenceCountedOpenSslContext) context).setUseTasks(useTasks);
+            // Explicit enable the session cache as its disabled by default on the client side.
+            ((ReferenceCountedOpenSslContext) context).sessionContext().setSessionCacheEnabled(true);
         }
         return context;
     }
